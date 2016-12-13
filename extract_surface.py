@@ -9,11 +9,11 @@ Description:
     shift points randomly
 '''
 
-
+import read_format
 import vtk
 import numpy as np
 import string
-import read_format
+import sys
 
 class extract_surface:
     '''
@@ -109,7 +109,7 @@ class extract_surface:
         win.Render()
         interactor.Start()
 
-    def load_nii_save_stl(self,in_name='data/test.nii',out_name='data/skull.stl',threshold = 100.0):
+    def load_nii_save_stl(self,in_name='data/skull.nii',out_name='data/skull.stl',threshold = 100.0):
         print "Function: load_nii_save_stl"
         print "Para1: input file name (.nii file)\nPara2: output file name (.stl file)"
         
@@ -134,9 +134,32 @@ class extract_surface:
         writer.SetFileName(out_name)
         writer.SetInputData(skull)
         writer.Update()
-        print out_name,'  saved!'
+        print out_name,'  saved!'   
 
-    def select_poly_points(self,stl_file='data/skull.stl'):
+    
+    def shift_poly_stl(self,file_in = 'data/skull.stl',file_out = 'data/moving_skull.stl'):        
+        print "Reading from ", file_in
+        print "Writing to   ", file_out
+        transform = vtk.vtkTransform()
+        transform.Translate(10,9,7.5)
+        transform.RotateWXYZ(30,1,1.0,1.0)
+        
+        reader = vtk.vtkSTLReader()
+        reader.SetFileName(file_in)
+        reader.Update()
+        poly = reader.GetOutput()
+
+        transFilter = vtk.vtkTransformFilter()
+        transFilter.SetInputData(poly)
+        transFilter.SetTransform(transform)
+        transFilter.Update()
+
+        writer = vtk.vtkSTLWriter()
+        writer.SetFileName(file_out)
+        writer.SetInputData(transFilter.GetOutput())
+        writer.Update()
+
+    def select_poly_points(self,stl_file='data/skull.stl',save_file='points.txt'):
         print "Function: extract_poly_line"
         print "Usage:\n\t\'h\': Capture point.\n\t\'s\': Write points to file"
         self.points = []
@@ -189,7 +212,7 @@ class extract_surface:
                 renderer.AddActor(actor)
                 win.Render()
             elif key == "s": # save to file
-                self._write_points(self.points,'data/point.txt')
+                self._write_points(self.points,save_file)
             else:
                 pass 
         interactor.AddObserver(vtk.vtkCommand.KeyPressEvent,keyPressEvent)
@@ -218,8 +241,17 @@ class extract_surface:
 
 if __name__=='__main__':
     ext = extract_surface()
-
-    ext.select_poly_points(stl_file = 'data/fix_skull.stl')
+    if len(sys.argv)>1:
+        stl_file = sys.argv[1]
+        save_file = sys.argv[2]
+        ext.select_poly_points(stl_file = stl_file,save_file=save_file)
+    
+    
+    #ext.load_nii_save_stl()
+    #ext.select_poly_points(stl_file='data/fix_skull.stl')
+    #ext.shift_poly_stl(file_in = 'data/fix_skull.stl')
+    else:
+        ext.select_poly_points(stl_file = 'data/fix_skull.stl')
 
     #ext.extract_poly_line()
     #ext.shift_points('data/point.txt','data/point_shift.txt')

@@ -11,6 +11,7 @@ import numpy as np
 import vtk
 from read_format import read_txt_points
 from read_format import read_vtk_format
+from read_format import write_poly
 
 class icp_register:
     def __init__(self):
@@ -208,14 +209,19 @@ def try_landmark_registration():
         return actor
 
     fix_actor = temp_read('data/fix_skull.stl')
+    fix_actor.GetProperty().SetColor(1,0,0)
     mov_actor = temp_read('data/moving_skull.stl')
     mov_actor.SetUserTransform(transform)
+    mov_actor.GetProperty().SetColor(1,1,0)
 
     renderer = vtk.vtkRenderer()
+    renderer.AddActor(fix_actor)
+    renderer.AddActor(mov_actor)
     renWin = vtk.vtkRenderWindow()
     renWin.AddRenderer(renderer)
     renWin.Render()
-    interactor = renWin.GetInteractor()
+    interactor = vtk.vtkRenderWindowInteractor()
+    interactor.SetRenderWindow(renWin)
     interactor.Start()
 
     pass
@@ -233,16 +239,28 @@ def try_2step_registration():
         6. multiply 2 matrix
         7. 
     '''
+    fix_points_small = 'data/fix_small_points.txt'
+    fix_points_small = 'data2/tgt.txt'
+    fix_points_large = 'data/fix_large_points.txt'
+    fix_stl = 'data/fix_skull.stl'
+
+    moving_points_small = 'data/moving_small_points.txt'
+    moving_points_small = 'data2/src.txt'
+    moving_points_large = 'data/moving_large_points.txt'
+    moving_points_large = 'data2/large.txt'
+    moving_stl = 'data/moving_skull.stl'
+    rough_transformed_moving_stl = 'data/rough_transform_moving.stl'
+    final_transformed_moving_stl = 'data/fine_transform_moving.stl'
+
+
+
     # reg1
-    rough_mv_points = read_txt_points('data/moving_small_points.txt')
-    rough_fix_points = read_txt_points('data/fix_small_points.txt')
+    rough_mv_points = read_txt_points(moving_points_small)
+    rough_fix_points = read_txt_points(fix_points_small)
 
 
     icp = icp_register()
     mat1 = landmark_registration(rough_mv_points,rough_fix_points)
-    #mat1.SetElement(0,3,0.1)
-    #mat1.SetElement(0,3,0.1)
-    #mat1.SetElement(0,3,0.1)
     print 'Mat1 :\n',mat1
     
     transform = vtk.vtkTransform()
@@ -253,11 +271,9 @@ def try_2step_registration():
     trans_filter.Update()
     new_rough_pt = trans_filter.GetOutput()
 
-
-    # transform with reg1
-    fine_points = read_txt_points('data/large_points.txt')
+    # transform large points from moving skull with reg1
+    fine_points = read_txt_points(moving_points_large)
     print fine_points.GetNumberOfPoints()
-
     transform = vtk.vtkTransform()
     transform.SetMatrix(mat1)
     trans_filter = vtk.vtkTransformFilter()
@@ -266,9 +282,20 @@ def try_2step_registration():
     trans_filter.Update()
     new_fine_pt = trans_filter.GetOutput()
     bound = new_fine_pt.GetBounds()
-
+    '''
+    # transform moving skull with rough transform
+    moving_skull = read_vtk_format(moving_stl,type='poly')
+    transform = vtk.vtkTransform()
+    transform.SetMatrix(mat1)
+    trans_filter = vtk.vtkTransformFilter()
+    trans_filter.SetTransform(transform)
+    trans_filter.SetInputData(moving_skull)
+    trans_filter.Update()
+    new_fine_pt = trans_filter.GetOutput()
+    write_poly(new_fine_pt,rough_transformed_moving_stl)
+    '''
     # reg2
-    fix_skull = read_vtk_format('data/fix_skull.stl',type='poly')
+    fix_skull = read_vtk_format(fix_stl,type='poly')
     def clip_area(poly,bounds):
         new_pts = vtk.vtkPoints()
         for id in range(poly.GetNumberOfPoints()):
@@ -287,8 +314,8 @@ def try_2step_registration():
         vx.Update()
         new_pts = vx.GetOutput()
         return new_pts
-    fix_skull_part = clip_area(fix_skull,bound)
-
+    #fix_skull_part = clip_area(fix_skull,bound)
+    fix_skull_part = fix_skull
 
     mat2 = icp.register(new_fine_pt,fix_skull_part)
     print 'Mat2: \n',mat2
@@ -308,6 +335,19 @@ def try_2step_registration():
     trans_filter.Update()
     final_fine_pt = trans_filter.GetOutput()
 
+    # transform skull
+    moving_skull = read_vtk_format(moving_stl,type='poly')
+    fin_transform = vtk.vtkTransform()
+    fin_transform.SetMatrix(mat_final)
+    trans_filter = vtk.vtkTransformFilter()
+    trans_filter.SetTransform(fin_transform)
+    trans_filter.SetInputData(moving_skull)
+    trans_filter.Update()
+    moving_skull = trans_filter.GetOutput()
+    
+    # save skull
+    #write_poly(moving_skull,final_transformed_moving_stl)
+
     # visualization
     def p2actor(pp):
         pPoly = vtk.vtkPolyData()
@@ -324,25 +364,28 @@ def try_2step_registration():
                                      np.random.rand(1)[0],
                                      np.random.rand(1)[0])
         return actor
-    def create_actor(poly):
+    def create_actor(poly,color=[]):
         mapper = vtk.vtkPolyDataMapper()
         mapper.SetInputData(poly)
         actor = vtk.vtkActor()
         actor.SetMapper(mapper)
         actor.GetProperty().SetPointSize(10)
-        actor.GetProperty().SetColor(np.random.rand(1)[0],
-                                     np.random.rand(1)[0],
-                                     np.random.rand(1)[0])
+        if len(color)<3:
+            actor.GetProperty().SetColor(np.random.rand(1)[0],
+                                        np.random.rand(1)[0],
+                                        np.random.rand(1)[0])
+        else:
+            actor.GetProperty().SetColor(color[0],color[1],color[2])
         return actor
     
     renderer = vtk.vtkRenderer()
-    renderer.AddActor(create_actor(fine_points))
-    renderer.AddActor(create_actor(new_fine_pt))
+    #renderer.AddActor(create_actor(fine_points))
+    #renderer.AddActor(create_actor(new_fine_pt))
     renderer.AddActor(create_actor(final_fine_pt))  
-    ac = create_actor(fix_skull)
-    ac.GetProperty().SetColor(0.5,0.5,0.5)
-    ac.GetProperty().SetOpacity(0.9)
+    ac = create_actor(fix_skull,[0,1,0])
+    ac2 = create_actor(moving_skull,[1,0,0])
     renderer.AddActor(ac)
+    renderer.AddActor(ac2)
     #renderer.AddActor(create_actor(read_vtk_format('data/moving_skull.stl',type='poly')))
 
     win = vtk.vtkRenderWindow()
@@ -357,6 +400,9 @@ def try_2step_registration():
 
 
 
+
+
+
 if __name__ == '__main__':
     
     #icp = icp_register()
@@ -364,8 +410,8 @@ if __name__ == '__main__':
     # stl = icp._read_poly('data/moving_skull.stl')
     # stl2 = icp.transform_poly(stl)
     # icp._write_poly(stl2,name='data/tskull.stl')
-    #try_2step_registration()
-    try_landmark_registration()
+    try_2step_registration()
+    #try_landmark_registration()
 
 '''
     1 0 0 0 

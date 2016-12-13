@@ -40,7 +40,7 @@ def read_vtk_format(filename,type='point'):
         points = reader.GetOutput().GetPoints()
         poly = reader.GetOutput()
     else:
-        raise ValueError('Input format invalid')
+        raise ValueError('Support stl file only...')
 
     if type=='point':
         return points
@@ -55,6 +55,7 @@ def read_txt_points(filename):
     private function to read points from a file
     return a point list
     '''
+    print 'Reading file: ',filename 
     points = []
     vtkpt = vtk.vtkPoints()
     with open(filename,'r') as ff:
